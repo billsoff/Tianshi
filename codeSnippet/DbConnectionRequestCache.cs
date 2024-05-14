@@ -13,6 +13,13 @@ namespace MyNamespace
             _localSlot = Thread.AllocateDataSlot();
         }
 
+        public static IDisposable Init(HttpContext httpContext)
+        {
+            Thread.SetData(_localSlot, httpContext.Items);
+
+            return new DisposableObject();
+        }
+
         public static IDbConnection CreateOrGetFromCache(Func<IDbConnection> connectionCreator)
         {
             IDbConnection connection = GetCachedDbConnection();
@@ -28,11 +35,9 @@ namespace MyNamespace
             return connection
         }
 
-        public static IDisposable Init(HttpContext httpContext)
+        public static void DetermineDisposing(this IDbConnection connection)
         {
-            Thread.SetData(_localSlot, httpContext.Items);
-
-            return new DisposableObject();
+            return new DbConnectionDisposable(connection);
         }
 
         private static IDbConnection GetCachedDbConnection()
@@ -49,7 +54,7 @@ namespace MyNamespace
 
         private static bool CacheConnection(IDbConnection connection)
         {
-             IDictionary<object, object?> cache = GetRequestCache();
+            IDictionary<object, object?> cache = GetRequestCache();
 
             if (cache == null)
             {
@@ -77,15 +82,47 @@ namespace MyNamespace
                 GC.SuppressFinalize(this);
             }
         }
+
+        private sealed class DbConnectionDisposable : IDisposable
+        {
+            private readonly IDbConnection _connection;
+
+            public DbConnectionDisposable(IDbConnection connection)
+            {
+                _connection = connection;
+            }
+
+            public void Dispose()
+            {
+                if (!ReferenceEquals(_connection, GetCachedDbConnection()))
+                {
+                    _connection?.Dispose();
+                }
+
+                GC.SuppressFinalize(this);
+            }
+        }
     }
 }
 
 
 // 1. Controller action head
-using DbConnectionRequestCache.Init(HttpContext);
+using var _ = DbConnectionRequestCache.Init(HttpContext);
 
 
 // 2. repository when create connection
 return DbConnectionRequestCache.CreateOrGetFromCache(() => new SqlConnection(...));
 
-// 3. remove using when use DB connection
+// 3. modification of using when use DB connection
+
+// original
+using (var connection = _context.CreateConnect())
+
+// modified
+using MyNamespace;
+
+// ...
+
+IDbConnection connection;
+
+using ((connection = _context.CreateConnect()).DetermineDisposing())
