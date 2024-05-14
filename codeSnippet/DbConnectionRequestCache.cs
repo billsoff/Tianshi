@@ -86,6 +86,6 @@ using DbConnectionRequestCache.Init(HttpContext);
 
 
 // 2. repository when create connection
-return DbConnectionRequestCache.CreateOrGetFromCache(() => SqlConnection(...));
+return DbConnectionRequestCache.CreateOrGetFromCache(() => new SqlConnection(...));
 
 // 3. remove using when use DB connection
