@@ -14,13 +14,7 @@ namespace CCFlow.NetCore.NetCore.common
         {
             foreach (var argument in filterContext.ActionArguments)
             {
-                var argumentValue = argument.Value;
-
-                if (argumentValue != null)
-                {
-                    SanitizeObjectProperties(argumentValue);
-                }
-
+                SanitizeObjectProperties(argument.Value);
             }
         }
 
@@ -66,18 +60,30 @@ namespace CCFlow.NetCore.NetCore.common
             var properties = obj
                 .GetType()
                 .GetProperties()
-                .Where(p => p.PropertyType == typeof(string) && p.CanWrite && p.SetMethod.GetParameters().Length == 1);
+                .Where(p => p.CanRead);
 
             foreach (var property in properties)
             {
-                string propertyValue = (string)property.GetValue(obj);
-
-                if (string.IsNullOrEmpty(propertyValue))
+                if (property.PropertyType == typeof(string))
                 {
+                    if (!property.CanWrite || property.SetMethod.GetParameters().Length != 1)
+                    {
+                        continue;
+                    }
+
+                    string propertyValue = (string)property.GetValue(obj);
+
+                    if (string.IsNullOrEmpty(propertyValue))
+                    {
+                        continue;
+                    }
+
+                    property.SetValue(obj, WebUtility.HtmlEncode(propertyValue));
+
                     continue;
                 }
 
-                property.SetValue(obj, WebUtility.HtmlEncode(propertyValue));
+                SanitizeObjectProperties(property.GetValue(obj), processedObjs);
             }
         }
     }
